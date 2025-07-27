@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DexReader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .theme-dark-blue { --tw-bg-opacity: 1; background-color: rgba(30, 41, 59, var(--tw-bg-opacity)); }
+    .theme-green { --tw-bg-opacity: 1; background-color: rgba(20, 83, 45, var(--tw-bg-opacity)); }
+    .theme-red { --tw-bg-opacity: 1; background-color: rgba(153, 27, 27, var(--tw-bg-opacity)); }
+    .theme-violet { --tw-bg-opacity: 1; background-color: rgba(76, 29, 149, var(--tw-bg-opacity)); }
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-16 sm:w-48 bg-gray-800 flex flex-col p-2 space-y-4">
+    <button onclick="showView('search')" class="text-center py-2">🔍 <span class="hidden sm:inline">Search</span></button>
+    <button onclick="showView('settings')" class="text-center py-2">⚙️ <span class="hidden sm:inline">Settings</span></button>
+  </aside>
+
+  <!-- Main Content -->
+  <main id="app" class="flex-1 overflow-y-auto p-4">
+    <!-- Search View -->
+    <section id="search-view" class="space-y-4">
+      <input id="searchInput" type="text" placeholder="Search manga..." class="w-full p-2 rounded bg-gray-700 text-white" oninput="searchManga()">
+      <div id="results" class="grid grid-cols-2 sm:grid-cols-4 gap-4"></div>
+    </section>
+
+    <!-- Reader View -->
+    <section id="reader-view" class="hidden">
+      <button onclick="backToSearch()" class="mb-4">← Back</button>
+      <div id="readerPages" class="flex flex-wrap gap-4 justify-center"></div>
+    </section>
+
+    <!-- Settings View -->
+    <section id="settings-view" class="hidden space-y-4">
+      <h2 class="text-xl font-bold">Settings</h2>
+      <div>
+        <label class="block mb-1">Theme:</label>
+        <select onchange="changeTheme(this.value)" class="bg-gray-700 p-2 rounded">
+          <option value="">Default</option>
+          <option value="theme-dark-blue">Dark Blue</option>
+          <option value="theme-green">Green</option>
+          <option value="theme-red">Red</option>
+          <option value="theme-violet">Violet</option>
+        </select>
+      </div>
+      <div>
+        <label class="block mb-1">Reader Style:</label>
+        <select onchange="changeReaderStyle(this.value)" class="bg-gray-700 p-2 rounded">
+          <option value="vertical">Vertical Scroll (Manhwa)</option>
+          <option value="rtl">Right to Left (Manga)</option>
+          <option value="ltr">Left to Right (American)</option>
+        </select>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let readerStyle = localStorage.getItem("readerStyle") || "vertical";
+
+    function showView(view) {
+      document.querySelector("#search-view").classList.add("hidden");
+      document.querySelector("#reader-view").classList.add("hidden");
+      document.querySelector("#settings-view").classList.add("hidden");
+      document.querySelector(`#${view}-view`).classList.remove("hidden");
+    }
+
+    function backToSearch() {
+      showView('search');
+    }
+
+    function changeTheme(theme) {
+      document.body.className = `flex h-screen overflow-hidden ${theme}`;
+      localStorage.setItem("theme", theme);
+    }
+
+    function changeReaderStyle(style) {
+      readerStyle = style;
+      localStorage.setItem("readerStyle", style);
+    }
+
+    function searchManga() {
+      const query = document.querySelector("#searchInput").value;
+      if (query.length < 3) return;
+      fetch(`https://api.mangadex.org/manga?title=${query}`)
+        .then(res => res.json())
+        .then(data => {
+          const results = document.querySelector("#results");
+          results.innerHTML = "";
+          data.data.forEach(manga => {
+            const id = manga.id;
+            const title = manga.attributes.title.en || "No Title";
+            const card = document.createElement("div");
+            card.className = "bg-gray-700 p-2 rounded cursor-pointer text-center";
+            card.innerHTML = `<div class='text-sm'>${title}</div>`;
+            card.onclick = () => loadChapters(id);
+            results.appendChild(card);
+          });
+        });
+    }
+
+    function loadChapters(mangaId) {
+      fetch(`https://api.mangadex.org/chapter?manga=${mangaId}&translatedLanguage[]=en&order[chapter]=asc&limit=1`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.data.length === 0) return alert("No chapters found");
+          const chapterId = data.data[0].id;
+          loadPages(chapterId);
+        });
+    }
+
+    function loadPages(chapterId) {
+      fetch(`https://api.mangadex.org/at-home/server/${chapterId}`)
+        .then(res => res.json())
+        .then(data => {
+          showView('reader');
+          const base = data.baseUrl;
+          const hash = data.chapter.hash;
+          const pages = data.chapter.data;
+          const container = document.querySelector("#readerPages");
+          container.innerHTML = "";
+
+          const style = readerStyle === "vertical" ? "flex-col" : "flex-row overflow-x-auto";
+          container.className = `flex ${style} gap-4`;
+
+          pages.forEach(p => {
+            const img = document.createElement("img");
+            img.src = `${base}/data/${hash}/${p}`;
+            img.className = "max-w-full sm:max-w-md rounded";
+            container.appendChild(img);
+          });
+        });
+    }
+
+    // Apply saved theme
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) document.body.classList.add(savedTheme);
+  </script>
+</body>
+</html>
